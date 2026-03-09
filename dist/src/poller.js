@@ -50,7 +50,8 @@ class PowerLobsterPoller extends events_1.EventEmitter {
                     for (const eventWrapper of events) {
                         // Unpack the payload which contains the actual event
                         const event = eventWrapper.payload;
-                        this.emit('message', event);
+                        // Emit both payload and the wrapper ID for ACKing
+                        this.emit('message', { payload: event, id: eventWrapper.id });
                     }
                 }
             }
@@ -64,6 +65,30 @@ class PowerLobsterPoller extends events_1.EventEmitter {
         // Schedule next poll
         if (this.isPolling) {
             this.timer = setTimeout(() => this.poll(), POLLING_INTERVAL);
+        }
+    }
+    async ack(eventId) {
+        if (!this.config.relayId || !this.config.relayApiKey)
+            return;
+        try {
+            // Try the main API endpoint for ACK (as suggested)
+            const response = await (0, node_fetch_1.default)(`https://powerlobster.com/api/relay/${this.config.relayId}/ack`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.config.relayApiKey}`
+                },
+                body: JSON.stringify({ event_id: eventId })
+            });
+            if (response.ok) {
+                console.log(`[PowerLobster] ACK successful for event ${eventId}`);
+            }
+            else {
+                console.warn(`[PowerLobster] ACK failed: ${response.status} ${response.statusText}`);
+            }
+        }
+        catch (err) {
+            console.error(`[PowerLobster] ACK error for event ${eventId}:`, err);
         }
     }
 }

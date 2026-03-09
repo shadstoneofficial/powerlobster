@@ -111,9 +111,20 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
       const poller = new PowerLobsterPoller(config);
       this.pollers.set(accountId, poller);
 
-      poller.on('message', async (event: PowerLobsterEvent) => {
-        console.log(`[PowerLobster] Received event: ${event.type}`, event);
-        await this.handleEvent(ctx, event);
+      poller.on('message', async (wrapper: { payload: PowerLobsterEvent; id: string }) => {
+        const event = wrapper.payload;
+        const eventId = wrapper.id;
+        
+        console.log(`[PowerLobster] Received event: ${event.type} (ID: ${eventId})`, event);
+        
+        try {
+          await this.handleEvent(ctx, event);
+          
+          // ACK the event after successful handling
+          await poller.ack(eventId);
+        } catch (err) {
+          console.error(`[PowerLobster] Failed to handle event ${eventId}:`, err);
+        }
       });
 
       poller.start();

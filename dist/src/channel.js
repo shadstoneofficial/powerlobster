@@ -83,9 +83,18 @@ class PowerLobsterChannel {
                 this.clients.set(accountId, client);
                 const poller = new poller_1.PowerLobsterPoller(config);
                 this.pollers.set(accountId, poller);
-                poller.on('message', async (event) => {
-                    console.log(`[PowerLobster] Received event: ${event.type}`, event);
-                    await this.handleEvent(ctx, event);
+                poller.on('message', async (wrapper) => {
+                    const event = wrapper.payload;
+                    const eventId = wrapper.id;
+                    console.log(`[PowerLobster] Received event: ${event.type} (ID: ${eventId})`, event);
+                    try {
+                        await this.handleEvent(ctx, event);
+                        // ACK the event after successful handling
+                        await poller.ack(eventId);
+                    }
+                    catch (err) {
+                        console.error(`[PowerLobster] Failed to handle event ${eventId}:`, err);
+                    }
                 });
                 poller.start();
                 // Keep the channel "alive" by returning a promise that never resolves
