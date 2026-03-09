@@ -223,7 +223,9 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
 
         // DEBUG: Check channelRuntime structure
         console.log('[PowerLobster] channelRuntime keys:', Object.keys(channelRuntime));
-        console.log('[PowerLobster] reply exists?:', !!channelRuntime.reply);
+        if (channelRuntime.reply) {
+            console.log('[PowerLobster] reply keys:', Object.keys(channelRuntime.reply));
+        }
 
         // Dispatch and handle reply
         if (channelRuntime.reply && typeof channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher === 'function') {
@@ -232,10 +234,12 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
               cfg: ctx.cfg,
               dispatcherOptions: {
                 deliver: async (payload: { text: string }, info: any) => {
+                  console.log(`[PowerLobster] Delivering reply to ${peerId}: ${payload.text.substring(0, 50)}...`);
                   // Send agent's reply back to PowerLobster
                   const client = this.clients.get(accountId);
                   if (client) {
                      await client.sendDM(peerId, payload.text);
+                     console.log(`[PowerLobster] Reply delivered successfully.`);
                   } else {
                      console.error(`[PowerLobster] Client for account ${accountId} not found during delivery`);
                   }
