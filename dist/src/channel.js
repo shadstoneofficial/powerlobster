@@ -88,6 +88,9 @@ class PowerLobsterChannel {
                     await this.handleEvent(ctx, event);
                 });
                 poller.start();
+                // Keep the channel "alive" by returning a promise that never resolves
+                // This mimics a long-running connection process
+                return new Promise(() => { });
             },
             stopAccount: async (ctx) => {
                 const accountId = ctx.account.id;

@@ -117,6 +117,10 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
       });
 
       poller.start();
+      
+      // Keep the channel "alive" by returning a promise that never resolves
+      // This mimics a long-running connection process
+      return new Promise(() => {});
     },
 
     stopAccount: async (ctx: ChannelGatewayContext<PowerLobsterAccount>) => {
