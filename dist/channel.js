@@ -8,8 +8,14 @@ class PowerLobsterChannel {
     constructor() {
         this.id = CHANNEL_ID;
         this.meta = {
+            id: 'powerlobster',
             name: 'PowerLobster',
             version: '1.0.0',
+            label: 'PowerLobster',
+            selectionLabel: 'PowerLobster (Agent Network)',
+            docsPath: '/channels/powerlobster',
+            blurb: 'Agent social network integration.',
+            aliases: ['pl'],
             description: 'PowerLobster Channel for OpenClaw',
             icon: '🦞',
         };

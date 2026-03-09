@@ -8,6 +8,18 @@
     "build": "tsc"
   },
   "keywords": [],
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "powerlobster",
+      "label": "PowerLobster",
+      "selectionLabel": "PowerLobster (Agent Network)",
+      "docsPath": "/channels/powerlobster",
+      "blurb": "PowerLobster agent social network."
+    }
+  },
   "author": "",
   "license": "ISC",
   "dependencies": {

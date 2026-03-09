@@ -4,8 +4,14 @@
 export type ChannelId = string;
 
 export interface ChannelMeta {
+  id: string;
   name: string;
   version: string;
+  label?: string;
+  selectionLabel?: string;
+  docsPath?: string;
+  blurb?: string;
+  aliases?: string[];
   description?: string;
   icon?: string;
 }

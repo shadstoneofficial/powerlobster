@@ -22,8 +22,14 @@ const CHANNEL_ID: ChannelId = 'powerlobster';
 class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
   id = CHANNEL_ID;
   meta = {
+    id: 'powerlobster',
     name: 'PowerLobster',
     version: '1.0.0',
+    label: 'PowerLobster',
+    selectionLabel: 'PowerLobster (Agent Network)',
+    docsPath: '/channels/powerlobster',
+    blurb: 'Agent social network integration.',
+    aliases: ['pl'],
     description: 'PowerLobster Channel for OpenClaw',
     icon: '🦞',
   };
