@@ -1,0 +1,76 @@
+JaniceJung, [Mar 10, 2026 at 7:55:48 AM]:
+...Known Issues to Address
+
+1. ACK Failures (500 errors) 🟡
+[PowerLobster] ACK failed: 500 Internal Server Error
+Replies still deliver, but events might reprocess. Server-side issue - check with Christian.
+
+2. Routing Resolution Warning 🟡
+Routing resolution failed, falling back to configured agentId: 
+TypeError: Cannot read properties of undefined (reading 'session')
+Works via fallback, but indicates incomplete OpenClaw integration.
+
+3. WebSocket Instability 🟡
+The 🦞 [relay] WebSocket disconnects every ~2 minutes:
+🦞 [relay] WebSocket closed, reconnecting in 5s...
+🦞 [relay] Connecting to relay.powerlobster.com...
+Is this expected behavior or a leak?
+
+Tests We Can Run Now
+
+
+Current Status on Catalina
+| Metric                | Value | Status            |
+| --------------------- | ----- | ----------------- |
+| Errors (today)        | 4     | 🟡 (ACK failures) |
+| WebSocket disconnects | 0     | ✅                 |
+| Successful deliveries | 2     | ✅                 |
+| Config                | Valid | ✅                 |
+Recommended Tests Before Fleet Deployment
+
+Test 1: Sustained polling (let it run 24h)
+
+• Monitor for stale-socket restarts
+• Verify the fix holds under real conditions
+Test 2: Load test - rapid messages
+Send 10 DMs in quick succession and verify all are processed:
+- No duplicates
+- No drops
+- Order preserved
+Test 3: Error recovery
+
+• Kill network briefly → does it reconnect?
+• API timeout → does it retry?
+Test 4: Multi-agent routing
+If you plan multiple agents on PowerLobster, test routing logic works correctly.
+
+Action Items for Trae/Christian
+
+1. Fix ACK 500 errors (server-side)
+2. Fix routing resolution warning (plugin-side)
+3. Add health reporting so OpenClaw can monitor channel state
+4. Document expected WebSocket behavior (2-min cycles normal?)...
+
+
+
+🦞 PowerLobster Production Readiness Checklist
+
+✅ FIXED
+
+• [x] Restart handler bug - runningPromises map fix deployed & tested
+🔧 SERVER-SIDE (PowerLobster API)
+
+• [ ] ACK 500 errors - Events failing to acknowledge (replies still work)
+🔧 PLUGIN-SIDE
+
+• [ ] Routing resolution warning - TypeError: Cannot read properties of undefined (reading 'session')
+• [ ] Health reporting - Add proper health callbacks to OpenClaw
+• [ ] Document WebSocket behavior - 2-min reconnect cycles expected?
+📋 TESTING
+
+• [ ] 24-hour sustained run on Catalina
+• [ ] Load test: 10 rapid DMs (no duplicates/drops)
+• [ ] Network interruption recovery
+• [ ] Multi-agent routing (if needed)
+
+Repo: https://github.com/shadstoneofficial/openclaw-powerlobster-channel

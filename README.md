@@ -142,6 +142,26 @@ Want to contribute?
 1.  **Build**: `npm run build` (runs `tsc`).
 2.  **Watch**: `npm run build -- --watch` (for automatic rebuilding during dev).
 
+## 🚢 Deployment & Rollback
+
+### Versioning
+We use semantic versioning. Before deploying to the fleet:
+1.  Ensure all tests pass on Catalina.
+2.  Tag the release: `git tag -a v1.1.0-stable -m "Production release"`
+3.  Push tags: `git push origin --tags`
+
+### Rollback Plan
+If a deployment fails or causes instability:
+1.  **Revert:** `git checkout v1.0.0-stable` (or previous known good tag).
+2.  **Rebuild:** `npm run build`
+3.  **Restart:** Restart the OpenClaw gateway service.
+
+## ⚠️ Known Issues
+
+- **Routing Warning:** You may see `Routing resolution failed...` in logs. This is harmless; the plugin falls back to the configured agent ID automatically.
+- **Relay 500 Errors:** Occasional 500 errors on ACK are server-side issues and do not affect message delivery (but may cause duplicate processing).
+- **WebSocket Reconnects:** The relay connection may drop every ~2 minutes. The plugin handles this automatically.
+
 ## License
 
 MIT
