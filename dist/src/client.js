@@ -10,16 +10,19 @@ class PowerLobsterClient {
     async request(url, method, body) {
         const headers = {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'Authorization': `Bearer ${this.config.apiKey}`,
         };
-        // Relay headers are not needed for main API, only for Relay API (which is handled in poller)
-        // But if we wanted to use them here for some reason, we could.
-        // The spec says "Auth: Bearer Token (API Key)" for main API.
-        const response = await fetch(url, {
+        const options = {
             method,
             headers,
-            body: body ? JSON.stringify(body) : undefined,
-        });
+        };
+        // Log the payload for debugging
+        if (body) {
+            options.body = JSON.stringify(body);
+            console.log(`[PowerLobster] API Request ${method} ${url}:`, options.body);
+        }
+        const response = await fetch(url, options);
         if (!response.ok) {
             const errorBody = await response.text();
             console.error(`[PowerLobster] API ${response.status} ${response.statusText} for ${url}: ${errorBody}`);
