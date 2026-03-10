@@ -16,6 +16,7 @@ import {
 } from './types';
 import { PowerLobsterClient } from './client';
 import { PowerLobsterPoller } from './poller';
+import { getTools, activeClients } from './tools'; // Import activeClients
 
 const CHANNEL_ID: ChannelId = 'powerlobster';
 
@@ -108,6 +109,7 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
 
       const client = new PowerLobsterClient(config);
       this.clients.set(accountId, client);
+      activeClients.set(accountId, client); // Register client for tools
 
       const poller = new PowerLobsterPoller(config);
       this.pollers.set(accountId, poller);
@@ -145,6 +147,7 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
         this.pollers.delete(accountId);
       }
       this.clients.delete(accountId);
+      activeClients.delete(accountId); // Clean up client from tools registry
 
       // Resolve the startAccount promise to let it exit cleanly
       const resolve = this.runningPromises.get(accountId);
@@ -198,6 +201,26 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
     } else if (eventType === 'wave.started') {
         content = `Wave started: ${eventPayload.title}`;
         peerId = 'wave-system'; 
+        type = 'wave';
+    } else if (eventType === 'task.assigned') {
+        content = `Task assigned: ${eventPayload.task?.title}. Project: ${eventPayload.project?.title}. Description: ${eventPayload.task?.description || "No description"}`;
+        peerId = 'task-system';
+        type = 'task';
+    } else if (eventType === 'task.comment') {
+        content = `New comment on task ${eventPayload.task?.title} from ${eventPayload.author}: ${eventPayload.content}`;
+        peerId = 'task-system';
+        type = 'task';
+    } else if (eventType === 'mention') {
+        content = `You were mentioned by ${eventPayload.author} in post: ${eventPayload.content}`;
+        peerId = eventPayload.author || 'mention-system';
+        type = 'mention';
+    } else if (eventType === 'wave.reminder') {
+        content = `Wave reminder: ${eventPayload.title} starts in 60 minutes`;
+        peerId = 'wave-system';
+        type = 'wave';
+    } else if (eventType === 'wave.scheduled') {
+        content = `Wave scheduled: ${eventPayload.title} at ${eventPayload.time}`;
+        peerId = 'wave-system';
         type = 'wave';
     } else {
         console.log(`[PowerLobster] Unhandled event type: ${eventType}`);
@@ -284,6 +307,21 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
       console.error(`[PowerLobster] Error dispatching event:`, err);
     }
   }
+
+  // Method to get tools for a specific account
+  getToolsForAccount(accountId: string) {
+    const client = this.clients.get(accountId);
+    if (!client) {
+      return [];
+    }
+    return getTools();
+  }
+
+  // Implementing agentTools if OpenClaw supports passing context/client
+  // But wait, the signature in types.ts is (client: any) => any[]
+  // This likely means OpenClaw will call this function and PASS the client/context?
+  // OR it means we define a static list of tools.
+  // Given the ambiguity, we'll keep the dynamic registration in startAccount which is safer for now.
 }
 
 export const powerLobsterChannel = new PowerLobsterChannel();

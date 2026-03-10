@@ -110,6 +110,7 @@ export interface ChannelPlugin<ResolvedAccount = any> {
   config: ChannelConfigAdapter<ResolvedAccount>;
   gateway: ChannelGatewayAdapter<ResolvedAccount>;
   outbound: ChannelOutboundAdapter;
+  agentTools?: (client: any) => any[]; // Added optional agentTools
 }
 
 // PowerLobster Specific Types

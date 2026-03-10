@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.powerLobsterChannel = void 0;
 const client_1 = require("./client");
 const poller_1 = require("./poller");
+const tools_1 = require("./tools"); // Import activeClients
 const CHANNEL_ID = 'powerlobster';
 class PowerLobsterChannel {
     constructor() {
@@ -82,6 +83,7 @@ class PowerLobsterChannel {
                 console.log(`[PowerLobster] Starting account ${accountId}`);
                 const client = new client_1.PowerLobsterClient(config);
                 this.clients.set(accountId, client);
+                tools_1.activeClients.set(accountId, client); // Register client for tools
                 const poller = new poller_1.PowerLobsterPoller(config);
                 this.pollers.set(accountId, poller);
                 poller.on('message', async (wrapper) => {
@@ -112,6 +114,7 @@ class PowerLobsterChannel {
                     this.pollers.delete(accountId);
                 }
                 this.clients.delete(accountId);
+                tools_1.activeClients.delete(accountId); // Clean up client from tools registry
                 // Resolve the startAccount promise to let it exit cleanly
                 const resolve = this.runningPromises.get(accountId);
                 if (resolve) {
@@ -140,6 +143,11 @@ class PowerLobsterChannel {
                 }
             },
         };
+        // Implementing agentTools if OpenClaw supports passing context/client
+        // But wait, the signature in types.ts is (client: any) => any[]
+        // This likely means OpenClaw will call this function and PASS the client/context?
+        // OR it means we define a static list of tools.
+        // Given the ambiguity, we'll keep the dynamic registration in startAccount which is safer for now.
     }
     async handleEvent(ctx, event) {
         const { account, channelRuntime } = ctx;
@@ -158,6 +166,31 @@ class PowerLobsterChannel {
         }
         else if (eventType === 'wave.started') {
             content = `Wave started: ${eventPayload.title}`;
+            peerId = 'wave-system';
+            type = 'wave';
+        }
+        else if (eventType === 'task.assigned') {
+            content = `Task assigned: ${eventPayload.task?.title}. Project: ${eventPayload.project?.title}. Description: ${eventPayload.task?.description || "No description"}`;
+            peerId = 'task-system';
+            type = 'task';
+        }
+        else if (eventType === 'task.comment') {
+            content = `New comment on task ${eventPayload.task?.title} from ${eventPayload.author}: ${eventPayload.content}`;
+            peerId = 'task-system';
+            type = 'task';
+        }
+        else if (eventType === 'mention') {
+            content = `You were mentioned by ${eventPayload.author} in post: ${eventPayload.content}`;
+            peerId = eventPayload.author || 'mention-system';
+            type = 'mention';
+        }
+        else if (eventType === 'wave.reminder') {
+            content = `Wave reminder: ${eventPayload.title} starts in 60 minutes`;
+            peerId = 'wave-system';
+            type = 'wave';
+        }
+        else if (eventType === 'wave.scheduled') {
+            content = `Wave scheduled: ${eventPayload.title} at ${eventPayload.time}`;
             peerId = 'wave-system';
             type = 'wave';
         }
@@ -244,6 +277,14 @@ class PowerLobsterChannel {
         catch (err) {
             console.error(`[PowerLobster] Error dispatching event:`, err);
         }
+    }
+    // Method to get tools for a specific account
+    getToolsForAccount(accountId) {
+        const client = this.clients.get(accountId);
+        if (!client) {
+            return [];
+        }
+        return (0, tools_1.getTools)();
     }
 }
 exports.powerLobsterChannel = new PowerLobsterChannel();
