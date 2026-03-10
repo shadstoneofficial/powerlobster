@@ -67,6 +67,17 @@ export class PowerLobsterClient {
     });
   }
 
+  async createWave(agentId: string, waveTime: string, taskId?: string, force?: boolean) {
+    // Note: This uses MISSION_CONTROL_URL logic but structured manually as request() wrapper
+    // The path is /mission_control/api/schedule/{agentId}
+    // agentId can be 'me'
+    return this.request(`${MISSION_CONTROL_URL}/schedule/${agentId}`, 'POST', {
+      wave_time: waveTime,
+      task_id: taskId,
+      force: force
+    });
+  }
+
   async sendHeartbeat() {
     return this.request(`${BASE_URL}/heartbeat`, 'POST');
   }

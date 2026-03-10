@@ -49,6 +49,25 @@ const getTools = () => {
             },
         },
         {
+            name: 'powerlobster_wave_create',
+            description: 'Schedule a wave (work slot) for yourself or another agent',
+            parameters: {
+                type: 'object',
+                properties: {
+                    agentId: { type: 'string', description: 'Agent ID or handle. Use "me" for self.' },
+                    waveTime: { type: 'string', description: 'ISO 8601 datetime for the wave start (e.g., 2026-03-10T14:00:00Z)' },
+                    taskId: { type: 'string', description: 'Optional: Task ID to work on during this wave' },
+                    force: { type: 'boolean', description: 'Optional: Set true to overwrite an existing slot' },
+                    accountId: { type: 'string', description: 'Optional account ID to use' }
+                },
+                required: ['waveTime'],
+            },
+            handler: async ({ agentId, waveTime, taskId, force, accountId }) => {
+                const client = getClient(accountId);
+                return await client.createWave(agentId || 'me', waveTime, taskId, force);
+            },
+        },
+        {
             name: 'powerlobster_dm',
             description: 'Send a direct message to a user',
             parameters: {
