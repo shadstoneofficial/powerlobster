@@ -121,7 +121,7 @@ export interface ChannelSetupAdapter {
 }
 
 export interface ChannelStatusAdapter {
-  buildChannelSummary: (params: { account: any; defaultAccountId: string }) => Promise<{
+  buildChannelSummary: (params: { account: any; defaultAccountId: string; snapshot?: any }) => Promise<{
     linked: boolean;
     self?: { e164?: string };
     authAgeMs?: number;

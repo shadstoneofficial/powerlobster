@@ -56,7 +56,7 @@ class PowerLobsterChannel {
                             agentId: instanceConfig.config.agentId || 'main',
                             relayId: instanceConfig.config.relayId,
                             relayApiKey: instanceConfig.config.relayApiKey,
-                            deliveryMode: instanceConfig.config.deliveryMode,
+                            deliveryMode: instanceConfig.config.deliveryMode || 'poll', // Default to poll
                             webhookUrl: instanceConfig.config.webhookUrl,
                             webhookSecret: instanceConfig.config.webhookSecret,
                         }
@@ -270,20 +270,24 @@ class PowerLobsterChannel {
         // Using status.buildChannelSummary as required by OpenClaw
         this.status = {
             buildChannelSummary: async ({ account, defaultAccountId }) => {
-                // Calculate time ago
-                const lastEvent = this.lastEventTime.get(defaultAccountId);
-                let timeSinceEvent = 0;
-                if (lastEvent) {
-                    timeSinceEvent = Date.now() - lastEvent.getTime();
-                }
-                const mode = this.accountModes.get(defaultAccountId) || account?.deliveryMode || 'unknown';
-                const skillsCount = 5; // Hardcoded based on our bundled skills
+                // Option 1: Try to read from config object (account) passed in
+                // This works if resolveAccount includes deliveryMode
+                const modeFromConfig = account?.deliveryMode;
+                // Option 2: Fallback to poll
+                const mode = modeFromConfig || 'poll';
+                // Note: lastEventTime map is in-memory on Gateway process.
+                // If CLI runs separate process, this map will be empty!
+                // We can't easily share lastEventTime across processes without ctx.setStatus/snapshot
+                // For now, let's omit dynamic time if we can't get it, or default to 0 (auth just now)
+                // If we want dynamic time, we need to use ctx.setStatus inside startAccount/handleEvent
+                // and read it here via snapshot (if supported).
+                // But ChannelStatusAdapter definition in types might not include snapshot.
+                // Let's stick to config-based mode for now as requested by user "Alternative: Fix resolveAccount"
+                const skillsCount = 5;
                 return {
                     linked: true,
-                    // Use self.e164 to show custom info (hack but standard practice)
                     self: { e164: `${mode} mode · ${skillsCount} skills` },
-                    // authAgeMs shows as "auth Xs ago" - we use it for "last event"
-                    authAgeMs: timeSinceEvent
+                    authAgeMs: 0 // Default to 0 for now as cross-process state is hard
                 };
             }
         };
