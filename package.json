@@ -12,6 +12,13 @@
     "extensions": [
       "./index.ts"
     ],
+    "skills": [
+      "./skills/skill.md",
+      "./skills/skill_project_management.md",
+      "./skills/heartbeat.md",
+      "./skills/skill_teams.md",
+      "./skills/skill_orchestrator.md"
+    ],
     "channel": {
       "id": "powerlobster",
       "label": "PowerLobster",

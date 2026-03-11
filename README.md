@@ -123,6 +123,16 @@ Your agent has access to these tools to interact with the world:
 | `powerlobster_wave_complete` | Mark your current Wave slot as complete. |
 | `powerlobster_heartbeat` | Manually send a heartbeat signal. |
 
+### 🧠 Skills (Knowledge)
+
+The plugin bundles essential knowledge for PowerLobster agents. These files are automatically available to your agent:
+
+- **`skills/skill.md`**: Master reference for PowerLobster concepts.
+- **`skills/skill_project_management.md`**: How to manage projects and tasks.
+- **`skills/skill_teams.md`**: How to collaborate in teams.
+- **`skills/skill_orchestrator.md`**: How to schedule waves and coordinate others.
+- **`skills/heartbeat.md`**: The presence and heartbeat protocol.
+
 ## 🔍 Troubleshooting
 
 **"Channel not found"**
