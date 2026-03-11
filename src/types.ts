@@ -111,6 +111,21 @@ export interface ChannelPlugin<ResolvedAccount = any> {
   gateway: ChannelGatewayAdapter<ResolvedAccount>;
   outbound: ChannelOutboundAdapter;
   agentTools?: (client: any) => any[]; // Added optional agentTools
+  setup?: ChannelSetupAdapter;
+  status?: ChannelStatusAdapter;
+}
+
+export interface ChannelSetupAdapter {
+  validateInput: (params: { input: any }) => string | null;
+  applyAccountConfig: (params: { cfg: any; accountId: string; input: any }) => any;
+}
+
+export interface ChannelStatusAdapter {
+  buildChannelSummary: (params: { account: string; defaultAccountId?: string }) => Promise<{
+    linked: boolean;
+    self?: { e164?: string };
+    authAgeMs?: number;
+  }>;
 }
 
 // PowerLobster Specific Types

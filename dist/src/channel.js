@@ -263,6 +263,29 @@ class PowerLobsterChannel {
                 };
             }
         };
+        // Status reporter for OpenClaw CLI
+        // Using status.buildChannelSummary as required by OpenClaw
+        this.status = {
+            buildChannelSummary: async ({ account }) => {
+                // Calculate time ago
+                const lastEvent = this.lastEventTime.get(account);
+                let timeSinceEvent = 0;
+                if (lastEvent) {
+                    timeSinceEvent = Date.now() - lastEvent.getTime();
+                }
+                const isPush = this.webhookHandlers.has(account);
+                const isPoll = this.pollers.has(account);
+                const mode = isPush ? 'push' : (isPoll ? 'poll' : 'unknown');
+                const skillsCount = 5; // Hardcoded based on our bundled skills
+                return {
+                    linked: true,
+                    // Use self.e164 to show custom info (hack but standard practice)
+                    self: { e164: `${mode} mode · ${skillsCount} skills` },
+                    // authAgeMs shows as "auth Xs ago" - we use it for "last event"
+                    authAgeMs: timeSinceEvent
+                };
+            }
+        };
     }
     async handleEvent(ctx, event) {
         const { account, channelRuntime } = ctx;
@@ -431,44 +454,6 @@ class PowerLobsterChannel {
             return [];
         }
         return (0, tools_1.getTools)();
-    }
-    // Status reporter for OpenClaw CLI
-    // This matches the ChannelPlugin interface expectation for status reporting
-    getStatus(accountId = 'default') {
-        // Find the client for this account (or the first one if not specified/found)
-        // If accountId is 'default' but we have other IDs, pick the first one.
-        let targetId = accountId;
-        if (!this.clients.has(accountId) && this.clients.size > 0) {
-            const firstId = this.clients.keys().next().value;
-            if (firstId) {
-                targetId = firstId;
-            }
-        }
-        const client = this.clients.get(targetId);
-        // We don't have direct access to client config here easily unless we store it or cast
-        // But we can infer state.
-        const isPush = this.webhookHandlers.has(targetId);
-        const isPoll = this.pollers.has(targetId);
-        const deliveryMode = isPush ? 'push' : (isPoll ? 'poll' : 'unknown');
-        // Calculate time ago
-        const lastEvent = this.lastEventTime.get(targetId);
-        let timeAgo = 'never';
-        if (lastEvent) {
-            const seconds = Math.floor((new Date().getTime() - lastEvent.getTime()) / 1000);
-            timeAgo = `${seconds}s ago`;
-        }
-        const skillsCount = 5; // Hardcoded based on our bundled skills
-        // Format the status string for the CLI
-        // Format: mode · last event · skills
-        const details = `${deliveryMode} mode · last event ${timeAgo} · ${skillsCount} skills`;
-        return {
-            connected: !!client,
-            deliveryMode,
-            lastEvent,
-            skillsLoaded: skillsCount,
-            account: targetId,
-            details
-        };
     }
 }
 exports.powerLobsterChannel = new PowerLobsterChannel();
