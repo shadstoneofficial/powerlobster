@@ -13,22 +13,32 @@ const plugin = {
     register(api) {
         api.registerChannel({ plugin: channel_1.powerLobsterChannel });
         // Register webhook route
-        // Note: The API for registering routes varies by OpenClaw version.
-        // Assuming api.router or similar exists.
-        if (api.router) {
-            api.router.post('/powerlobster/webhook', async (req, res) => {
-                try {
-                    await channel_1.powerLobsterChannel.handleWebhook(req);
-                    res.status(200).send({ status: 'received' });
-                }
-                catch (err) {
-                    console.error('[PowerLobster] Webhook error:', err);
-                    res.status(500).send({ error: err.message });
+        if (typeof api.registerHttpRoute === 'function') {
+            api.registerHttpRoute({
+                path: '/powerlobster/webhook',
+                handler: async (req, res) => {
+                    // Ensure it's a POST
+                    if (req.method !== 'POST') {
+                        res.statusCode = 405;
+                        res.end('Method Not Allowed');
+                        return;
+                    }
+                    try {
+                        await channel_1.powerLobsterChannel.handleWebhook(req);
+                        res.statusCode = 200;
+                        res.end(JSON.stringify({ status: 'received' }));
+                    }
+                    catch (err) {
+                        console.error('[PowerLobster] Webhook error:', err);
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ error: err.message }));
+                    }
                 }
             });
+            console.log('[PowerLobster] Registered webhook route: /powerlobster/webhook');
         }
         else {
-            console.warn('[PowerLobster] api.router not available. Webhook mode may not work.');
+            console.warn('[PowerLobster] api.registerHttpRoute not available. Webhook mode may not work.');
         }
         // Register tools globally as requested
         // The tools implementation now dynamically looks up the active client
