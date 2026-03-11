@@ -31,8 +31,9 @@ export class PowerLobsterWebhookHandler {
     }
 
     // Normalize event if needed, similar to poller
-    // Relay push payload structure matches the poller event structure
-    const event = body;
+    // Relay push payload structure matches the poller event structure: { payload: {...}, id: "..." }
+    // We need to extract the inner payload.
+    const event = body.payload || body;
 
     if (!event || !event.type) {
         throw new Error('Invalid event payload');
