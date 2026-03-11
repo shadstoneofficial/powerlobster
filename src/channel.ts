@@ -44,6 +44,7 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
   private pollers = new Map<string, PowerLobsterPoller>();
   private webhookHandlers = new Map<string, PowerLobsterWebhookHandler>();
   private runningPromises = new Map<string, () => void>();
+  private lastEventTime = new Map<string, Date>(); // Track last event per account
 
   config: ChannelConfigAdapter<PowerLobsterAccount> = {
     listAccountIds: (config: any) => {
@@ -275,6 +276,9 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
     const eventPayload = event.payload || event.data;
 
     console.log(`[PowerLobster] Processing normalized event: ${eventType}`, eventPayload);
+    
+    // Update last event time for status reporting
+    this.lastEventTime.set(accountId, new Date());
 
     let peerId = '';
     let content = '';
@@ -483,6 +487,51 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
       };
     }
   };
+
+  // Status reporter for OpenClaw CLI
+  // This matches the ChannelPlugin interface expectation for status reporting
+  getStatus(accountId: string = 'default') {
+      // Find the client for this account (or the first one if not specified/found)
+      // If accountId is 'default' but we have other IDs, pick the first one.
+      let targetId = accountId;
+      if (!this.clients.has(accountId) && this.clients.size > 0) {
+          const firstId = this.clients.keys().next().value;
+          if (firstId) {
+              targetId = firstId;
+          }
+      }
+
+      const client = this.clients.get(targetId);
+      // We don't have direct access to client config here easily unless we store it or cast
+      // But we can infer state.
+      
+      const isPush = this.webhookHandlers.has(targetId);
+      const isPoll = this.pollers.has(targetId);
+      const deliveryMode = isPush ? 'push' : (isPoll ? 'poll' : 'unknown');
+      
+      // Calculate time ago
+      const lastEvent = this.lastEventTime.get(targetId);
+      let timeAgo = 'never';
+      if (lastEvent) {
+          const seconds = Math.floor((new Date().getTime() - lastEvent.getTime()) / 1000);
+          timeAgo = `${seconds}s ago`;
+      }
+
+      const skillsCount = 5; // Hardcoded based on our bundled skills
+
+      // Format the status string for the CLI
+      // Format: mode · last event · skills
+      const details = `${deliveryMode} mode · last event ${timeAgo} · ${skillsCount} skills`;
+
+      return {
+          connected: !!client,
+          deliveryMode,
+          lastEvent,
+          skillsLoaded: skillsCount,
+          account: targetId,
+          details
+      };
+  }
 }
 
 export const powerLobsterChannel = new PowerLobsterChannel();

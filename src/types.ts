@@ -127,6 +127,17 @@ export interface PowerLobsterConfig {
   webhookSecret?: string;         // Optional: for signature verification
 }
 
+export interface ChannelStatus {
+  connected: boolean;
+  deliveryMode: string;
+  lastEvent: Date | null;
+  skillsLoaded: number;
+  account: string;
+  relayId?: string;
+  webhookUrl?: string;
+  details?: string; // OpenClaw often looks for this string to display in the CLI
+}
+
 export interface PowerLobsterAccount {
   id: string;
   config: PowerLobsterConfig;
