@@ -16,22 +16,25 @@ const plugin = {
         if (typeof api.registerHttpRoute === 'function') {
             api.registerHttpRoute({
                 path: '/powerlobster/webhook',
+                auth: 'plugin', // Allow external calls without OpenClaw token
                 handler: async (req, res) => {
                     // Ensure it's a POST
                     if (req.method !== 'POST') {
                         res.statusCode = 405;
                         res.end('Method Not Allowed');
-                        return;
+                        return true;
                     }
                     try {
                         await channel_1.powerLobsterChannel.handleWebhook(req);
                         res.statusCode = 200;
                         res.end(JSON.stringify({ status: 'received' }));
+                        return true;
                     }
                     catch (err) {
                         console.error('[PowerLobster] Webhook error:', err);
                         res.statusCode = 500;
                         res.end(JSON.stringify({ error: err.message }));
+                        return true;
                     }
                 }
             });
