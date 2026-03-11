@@ -29,6 +29,7 @@ class PowerLobsterChannel {
         this.webhookHandlers = new Map();
         this.runningPromises = new Map();
         this.lastEventTime = new Map(); // Track last event per account
+        this.accountModes = new Map(); // Track mode per account
         this.config = {
             listAccountIds: (config) => {
                 // Check for accounts in channels.powerlobster.instances
@@ -114,6 +115,7 @@ class PowerLobsterChannel {
                 this.clients.set(accountId, client);
                 tools_1.activeClients.set(accountId, client); // Register client for tools
                 if (config.deliveryMode === 'push') {
+                    this.accountModes.set(accountId, 'push');
                     if (!config.webhookUrl) {
                         throw new Error('webhookUrl is required for push mode');
                     }
@@ -155,6 +157,7 @@ class PowerLobsterChannel {
                     }
                 }
                 else {
+                    this.accountModes.set(accountId, 'poll');
                     // Default: Start Poller (Existing logic)
                     const poller = new poller_1.PowerLobsterPoller(config);
                     this.pollers.set(accountId, poller);
@@ -273,9 +276,7 @@ class PowerLobsterChannel {
                 if (lastEvent) {
                     timeSinceEvent = Date.now() - lastEvent.getTime();
                 }
-                const isPush = this.webhookHandlers.has(account);
-                const isPoll = this.pollers.has(account);
-                const mode = isPush ? 'push' : (isPoll ? 'poll' : 'unknown');
+                const mode = this.accountModes.get(account) || 'unknown';
                 const skillsCount = 5; // Hardcoded based on our bundled skills
                 return {
                     linked: true,
