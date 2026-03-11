@@ -198,6 +198,47 @@ class PowerLobsterChannel {
         // This likely means OpenClaw will call this function and PASS the client/context?
         // OR it means we define a static list of tools.
         // Given the ambiguity, we'll keep the dynamic registration in startAccount which is safer for now.
+        // Setup adapter for CLI configuration
+        this.setup = {
+            validateInput: ({ input }) => {
+                if (!input.token)
+                    return "Missing --token flag";
+                try {
+                    const decoded = JSON.parse(atob(input.token));
+                    if (!decoded.apiKey || !decoded.relayId || !decoded.relayApiKey) {
+                        return "Invalid token: missing required fields";
+                    }
+                }
+                catch {
+                    return "Invalid token: not valid base64 JSON";
+                }
+                return null;
+            },
+            applyAccountConfig: ({ cfg, accountId, input }) => {
+                const decoded = JSON.parse(atob(input.token));
+                return {
+                    ...cfg,
+                    channels: {
+                        ...cfg.channels,
+                        powerlobster: {
+                            ...cfg.channels?.powerlobster,
+                            accounts: {
+                                ...cfg.channels?.powerlobster?.accounts,
+                                [accountId]: {
+                                    apiKey: decoded.apiKey,
+                                    relayId: decoded.relayId,
+                                    relayApiKey: decoded.relayApiKey,
+                                    // Optional push configuration could be added here if included in token
+                                    ...(decoded.deliveryMode ? { deliveryMode: decoded.deliveryMode } : {}),
+                                    ...(decoded.webhookUrl ? { webhookUrl: decoded.webhookUrl } : {}),
+                                    ...(decoded.webhookSecret ? { webhookSecret: decoded.webhookSecret } : {}),
+                                }
+                            }
+                        }
+                    }
+                };
+            }
+        };
     }
     async handleEvent(ctx, event) {
         const { account, channelRuntime } = ctx;
