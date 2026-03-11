@@ -43,89 +43,99 @@ const plugin = {
     }
     
     // Register CLI command
-    if (typeof api.registerCommand === 'function') {
-        api.registerCommand({
-            name: 'powerlobster:setup',
-            description: 'Interactive setup for PowerLobster channel',
-            execute: async (context: any) => {
-                const { prompt, print, config } = context;
-                
-                print.info('🦞 PowerLobster Setup Wizard');
-                print.info('');
-                
-                // Step 1: Credentials
-                const hasToken = await prompt.confirm('Do you have an install token?');
-                let apiKey, relayId, relayApiKey;
-                let deliveryMode = 'poll';
-                let webhookUrl = '';
-                
-                if (hasToken) {
-                    const token = await prompt.text('Paste your token:');
-                    try {
-                        const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
-                        apiKey = decoded.apiKey;
-                        relayId = decoded.relayId;
-                        relayApiKey = decoded.relayApiKey;
-                        if (decoded.deliveryMode) deliveryMode = decoded.deliveryMode;
-                        if (decoded.webhookUrl) webhookUrl = decoded.webhookUrl;
-                        print.success('Token parsed successfully!');
-                    } catch (e) {
-                        print.error('Invalid token format.');
-                        return;
-                    }
-                } else {
-                    apiKey = await prompt.text('Enter PowerLobster API Key:');
-                    relayId = await prompt.text('Enter Relay ID:');
-                    relayApiKey = await prompt.text('Enter Relay API Key:');
-                }
-                
-                // Step 2: Verify Connection (Mock for now, or use client to test)
-                print.info('Testing relay connection...');
-                // Ideally instantiate client here and test
-                print.success('✅ Connected!');
-                
-                // Step 3: Delivery Mode
-                if (!webhookUrl) {
-                    const usePush = await prompt.confirm('Do you have a webhook URL for push mode?');
-                    if (usePush) {
-                        deliveryMode = 'push';
-                        webhookUrl = await prompt.text('Enter webhook URL:');
+    if (typeof api.registerCli === 'function') {
+        api.registerCli((ctx: any) => {
+            const cmd = ctx.program.command('powerlobster');
+            
+            cmd.command('setup')
+                .description('Interactive setup for PowerLobster channel')
+                .action(async () => {
+                    const p = await import('@clack/prompts');
+                    
+                    p.intro('🦞 PowerLobster Setup Wizard');
+                    
+                    // Step 1: Credentials
+                    const hasToken = await p.confirm({ message: 'Do you have an install token?' });
+                    if (p.isCancel(hasToken)) { p.cancel('Cancelled'); process.exit(0); }
+                    
+                    let apiKey, relayId, relayApiKey;
+                    let deliveryMode = 'poll';
+                    let webhookUrl = '';
+                    
+                    if (hasToken) {
+                        const token = await p.text({ message: 'Paste your token:' });
+                        if (p.isCancel(token)) { p.cancel('Cancelled'); process.exit(0); }
+                        
+                        try {
+                            const decoded = JSON.parse(Buffer.from(token as string, 'base64').toString('utf-8'));
+                            apiKey = decoded.apiKey;
+                            relayId = decoded.relayId;
+                            relayApiKey = decoded.relayApiKey;
+                            if (decoded.deliveryMode) deliveryMode = decoded.deliveryMode;
+                            if (decoded.webhookUrl) webhookUrl = decoded.webhookUrl;
+                            p.note('Token parsed successfully!', 'Success');
+                        } catch (e) {
+                            p.note('Invalid token format.', 'Error');
+                            return;
+                        }
                     } else {
-                        print.info('Using poll mode (default)');
+                        apiKey = await p.text({ message: 'Enter PowerLobster API Key:' });
+                        if (p.isCancel(apiKey)) { p.cancel('Cancelled'); process.exit(0); }
+                        
+                        relayId = await p.text({ message: 'Enter Relay ID:' });
+                        if (p.isCancel(relayId)) { p.cancel('Cancelled'); process.exit(0); }
+                        
+                        relayApiKey = await p.text({ message: 'Enter Relay API Key:' });
+                        if (p.isCancel(relayApiKey)) { p.cancel('Cancelled'); process.exit(0); }
                     }
-                }
-                
-                // Step 4: Save Config
-                const accountConfig = {
-                    apiKey,
-                    relayId,
-                    relayApiKey,
-                    deliveryMode,
-                    ...(webhookUrl ? { webhookUrl } : {})
-                };
-                
-                // Assuming OpenClaw provides a way to save config via context.config or api.config
-                // If not, we might need to instruct user or write file manually if context allows
-                // Based on OpenClaw CLI pattern, it usually handles config updates via `config.set`
-                
-                if (config && typeof config.set === 'function') {
-                    // Update channels.powerlobster.instances[0].config
-                    // This is tricky without knowing exact config structure API exposes
-                    // But typically:
-                    await config.set('channels.powerlobster.instances', [{
-                        id: 'main',
-                        config: accountConfig
-                    }]);
-                    print.success('Config saved to openclaw.json');
-                } else {
-                    print.warning('Could not auto-save config. Please add this to openclaw.json manually:');
-                    print.info(JSON.stringify(accountConfig, null, 2));
-                }
-                
-                print.info('');
-                print.info('Skills loaded: 5');
-                print.success('Setup complete! Try sending a DM to test.');
-            }
+                    
+                    // Step 2: Delivery Mode
+                    if (!webhookUrl) {
+                        const usePush = await p.confirm({ message: 'Do you have a webhook URL for push mode?' });
+                        if (p.isCancel(usePush)) { p.cancel('Cancelled'); process.exit(0); }
+                        
+                        if (usePush) {
+                            deliveryMode = 'push';
+                            const url = await p.text({ message: 'Enter webhook URL:' });
+                            if (p.isCancel(url)) { p.cancel('Cancelled'); process.exit(0); }
+                            webhookUrl = url as string;
+                        } else {
+                            p.note('Using poll mode (default)', 'Info');
+                        }
+                    }
+                    
+                    // Step 3: Save Config
+                    const accountConfig = {
+                        apiKey,
+                        relayId,
+                        relayApiKey,
+                        deliveryMode,
+                        ...(webhookUrl ? { webhookUrl } : {})
+                    };
+                    
+                    try {
+                        // Load fresh config
+                        const config = await api.runtime.config.loadConfig();
+                        
+                        // Mutate config
+                        config.channels = config.channels || {};
+                        config.channels.powerlobster = {
+                            instances: [{
+                                id: 'main',
+                                config: accountConfig
+                            }]
+                        };
+                        
+                        // Write config
+                        await api.runtime.config.writeConfigFile(config);
+                        
+                        p.note('Skills loaded: 5', 'Info');
+                        p.outro('✅ Configuration saved! Try sending a DM to test.');
+                    } catch (err) {
+                        p.note('Could not auto-save config. Please check permissions.', 'Error');
+                        console.error(err);
+                    }
+                });
         });
     }
   },
