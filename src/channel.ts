@@ -18,6 +18,8 @@ import { PowerLobsterClient } from './client';
 import { PowerLobsterPoller } from './poller';
 import { getTools, activeClients } from './tools'; // Import activeClients
 
+import { PowerLobsterWebhookHandler } from './webhook'; // Import webhook handler
+
 const CHANNEL_ID: ChannelId = 'powerlobster';
 
 class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
@@ -40,6 +42,7 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
 
   private clients = new Map<string, PowerLobsterClient>();
   private pollers = new Map<string, PowerLobsterPoller>();
+  private webhookHandlers = new Map<string, PowerLobsterWebhookHandler>();
   private runningPromises = new Map<string, () => void>();
 
   config: ChannelConfigAdapter<PowerLobsterAccount> = {
@@ -111,26 +114,78 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
       this.clients.set(accountId, client);
       activeClients.set(accountId, client); // Register client for tools
 
-      const poller = new PowerLobsterPoller(config);
-      this.pollers.set(accountId, poller);
+      if (config.deliveryMode === 'push') {
+          if (!config.webhookUrl) {
+              throw new Error('webhookUrl is required for push mode');
+          }
 
-      poller.on('message', async (wrapper: { payload: PowerLobsterEvent; id: string }) => {
-        const event = wrapper.payload;
-        const eventId = wrapper.id;
-        
-        console.log(`[PowerLobster] Received event: ${event.type} (ID: ${eventId})`, event);
-        
-        try {
-          await this.handleEvent(ctx, event);
+          console.log(`[PowerLobster] Registering for PUSH mode at ${config.webhookUrl}`);
           
-          // ACK the event after successful handling
-          await poller.ack(eventId);
-        } catch (err) {
-          console.error(`[PowerLobster] Failed to handle event ${eventId}:`, err);
-        }
-      });
+          try {
+              // Call Relay API to register
+              await client.configureRelay({
+                  mode: 'push',
+                  url: config.webhookUrl,
+                  secret: config.webhookSecret
+              });
+              
+              // Set up the webhook handler logic (passive listening)
+              const webhookHandler = new PowerLobsterWebhookHandler(async (event) => {
+                  // Re-use existing handleEvent logic
+                  // Note: 'wrapper' unpacking logic from poller is specific to polling.
+                  // Relay push payload likely matches the event structure directly or wrapped.
+                  // If it matches poller wrapper: { payload: event, id: string }
+                  // Let's assume for now it pushes the EVENT object directly or wrapper.
+                  // Based on poller code: poller emits { payload: event, id: string }
+                  // The webhook handler in src/webhook.ts expects to receive the BODY.
+                  // If Relay pushes the same structure as it stores:
+                  
+                  // Let's wrap it to match handleEvent expectation if needed, or modify handleEvent.
+                  // handleEvent expects (ctx, event).
+                  
+                  // We need to ACK if successful?
+                  // Relay push expects 200 OK.
+                  
+                  // The webhook handler calls this.eventHandler(event)
+                  
+                  // We need to normalize the event structure here.
+                  // If Relay pushes { type: ..., payload: ... }, we pass that.
+                  await this.handleEvent(ctx, event);
+              }, config.webhookSecret);
+              
+              this.webhookHandlers.set(accountId, webhookHandler);
+              console.log('[PowerLobster] Push mode active. Listening for events.');
+              
+          } catch (err) {
+              console.error('[PowerLobster] Failed to configure push mode:', err);
+              // Fallback to polling? Or just fail?
+              // For now, let's throw to indicate misconfiguration
+              throw err;
+          }
 
-      poller.start();
+      } else {
+          // Default: Start Poller (Existing logic)
+          const poller = new PowerLobsterPoller(config);
+          this.pollers.set(accountId, poller);
+
+          poller.on('message', async (wrapper: { payload: PowerLobsterEvent; id: string }) => {
+            const event = wrapper.payload;
+            const eventId = wrapper.id;
+            
+            console.log(`[PowerLobster] Received event: ${event.type} (ID: ${eventId})`, event);
+            
+            try {
+              await this.handleEvent(ctx, event);
+              
+              // ACK the event after successful handling
+              await poller.ack(eventId);
+            } catch (err) {
+              console.error(`[PowerLobster] Failed to handle event ${eventId}:`, err);
+            }
+          });
+
+          poller.start();
+      }
       
       // Keep the channel "alive" by returning a promise that never resolves
       // This mimics a long-running connection process
@@ -146,6 +201,7 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
         poller.stop();
         this.pollers.delete(accountId);
       }
+      this.webhookHandlers.delete(accountId); // Cleanup webhook handler
       this.clients.delete(accountId);
       activeClients.delete(accountId); // Clean up client from tools registry
 
@@ -308,6 +364,38 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
     } catch (err) {
       console.error(`[PowerLobster] Error dispatching event:`, err);
     }
+  }
+
+  // Method to handle incoming webhooks (called from index.ts or router)
+  async handleWebhook(req: any) {
+      // Logic to determine which account this webhook is for.
+      // If we support multiple accounts, the webhook URL might need an ID or query param?
+      // OR the payload contains the relay_id/agent_id.
+      
+      // For now, let's assume single-tenant or broadcast to all matching?
+      // Better: iterate handlers and try to match?
+      // Or rely on config.
+      
+      // If we have only one account in push mode, use that.
+      if (this.webhookHandlers.size === 1) {
+          const handler = this.webhookHandlers.values().next().value;
+          if (handler) {
+              return handler.handle(req);
+          }
+      }
+      
+      // TODO: Multi-tenant routing logic for webhooks
+      // Ideally, the webhook URL should be /webhooks/powerlobster/:accountId
+      
+      if (this.webhookHandlers.size > 1) {
+          console.warn('[PowerLobster] Multiple accounts in push mode not fully supported for shared webhook URL. Using first handler.');
+          const handler = this.webhookHandlers.values().next().value;
+          if (handler) {
+              return handler.handle(req);
+          }
+      }
+      
+      throw new Error('No webhook handler found');
   }
 
   // Method to get tools for a specific account

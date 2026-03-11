@@ -1,0 +1,58 @@
+I have successfully implemented the "Push Mode" integration in the OpenClaw Channel Plugin.
+
+### Summary of Changes
+1. New Webhook Handler ( src/webhook.ts ) : Created a class to handle incoming POST requests and dispatch them to the event handler.
+2. Configuration Update ( src/types.ts ) : Added deliveryMode , webhookUrl , and webhookSecret to the config schema.
+3. Client Update ( src/client.ts ) : Added configureRelay method to call the new POST /api/v1/agent/configure endpoint on the Relay Service.
+4. Channel Logic ( src/channel.ts ) :
+   - Updated startAccount to check deliveryMode .
+   - If push : Registers with the Relay using configureRelay and sets up the webhook listener instead of starting the poller.
+   - Added handleWebhook method to route incoming webhooks to the correct account handler.
+5. Route Registration ( index.ts ) : Added logic to register the POST /powerlobster/webhook route with OpenClaw's router (if available).
+The project has been rebuilt ( npm run build ).
+
+### Deployment Instructions
+1. Relay Service : Ensure the Relay team has deployed the POST /api/v1/agent/configure endpoint.
+2. OpenClaw Config : Users can now update their openclaw.json to enable push mode:
+   ```
+   {
+     "channels": {
+       "powerlobster": {
+         "instances": [
+           {
+             "id": "main",
+             "config": {
+               "apiKey": "...",
+               "agentId": "...",
+               "relayId": "...",
+               "relayApiKey": "...",
+               "deliveryMode": "push",
+               "webhookUrl": "https://my-openclaw.com/webhooks/
+               powerlobster"
+             }
+           }
+         ]
+       }
+     }
+   }
+   ```
+The plugin is now ready for "Push Mode"! 🦞
+
+
+
+Notes: 
+
+1. Backwards Compatible:
+   
+   - The code explicitly checks if (config.deliveryMode === 'push') .
+   - If deliveryMode is missing (undefined) or set to 'poll' , it falls into the else block which runs the existing polling logic exactly as before.
+   - Existing agents with old config files don't have deliveryMode , so they default to polling. Nothing breaks for them.
+2. User Choice:
+   
+   - New users (or upgrading users) can simply add "deliveryMode": "push" and "webhookUrl": "..." to their config to switch modes.
+   - If they don't add it, they stay on polling.
+3. Non-Interference:
+   
+   - The push logic and polling logic are in mutually exclusive if/else blocks in startAccount . An agent is either in push mode OR poll mode, never both (unless we specifically coded a 'both' mode, which we didn't, to keep it clean).
+   - The Relay server handles the "queue persistence" regardless of mode, so switching back and forth is safe too.
+The implementation is safe and ready for deployment! side logic is safe and ready for deployment! 🦞

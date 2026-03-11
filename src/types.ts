@@ -120,6 +120,11 @@ export interface PowerLobsterConfig {
   agentId: string; // The target OpenClaw agent ID
   relayId?: string;
   relayApiKey?: string;
+  
+  // Push Mode Options
+  deliveryMode?: 'poll' | 'push'; // Default: 'poll'
+  webhookUrl?: string;            // Required if deliveryMode='push'
+  webhookSecret?: string;         // Optional: for signature verification
 }
 
 export interface PowerLobsterAccount {
