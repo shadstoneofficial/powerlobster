@@ -9,9 +9,21 @@ class PowerLobsterWebhookHandler {
     async handle(req) {
         // Basic signature verification logic could go here if req.headers['x-powerlobster-signature'] exists
         // For now, we trust the payload if the route is secure or secret is matched manually
-        // OpenClaw might pass the body directly or we might need to parse it
-        const body = req.body;
-        console.log('[PowerLobster] Webhook received:', JSON.stringify(body));
+        // Read body from request stream manually as OpenClaw doesn't parse it
+        const chunks = [];
+        for await (const chunk of req) {
+            chunks.push(Buffer.from(chunk));
+        }
+        const rawBody = Buffer.concat(chunks).toString("utf-8");
+        console.log("[PowerLobster] Webhook received raw:", rawBody.substring(0, 200));
+        let body;
+        try {
+            body = rawBody ? JSON.parse(rawBody) : null;
+        }
+        catch (e) {
+            console.error("[PowerLobster] Failed to parse webhook body:", e);
+            throw new Error("Invalid JSON body");
+        }
         // Normalize event if needed, similar to poller
         // Relay push payload structure matches the poller event structure
         const event = body;
