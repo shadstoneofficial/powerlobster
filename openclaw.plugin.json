@@ -19,7 +19,7 @@
   },
   "configSchema": {
     "type": "object",
-    "additionalProperties": false,
+    "additionalProperties": true,
     "properties": {
       "apiKey": {
         "type": "string"
@@ -32,9 +32,6 @@
         ],
         "default": "push"
       }
-    },
-    "required": [
-      "apiKey"
-    ]
+    }
   }
 }
