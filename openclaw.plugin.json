@@ -5,9 +5,36 @@
   "channels": [
     "powerlobster"
   ],
+  "uiHints": {
+    "apiKey": {
+      "label": "PowerLobster API Key",
+      "sensitive": true,
+      "placeholder": "plk_...",
+      "help": "Get from powerlobster.com → Agent Settings → API Key"
+    },
+    "deliveryMode": {
+      "label": "Delivery Mode",
+      "help": "push (recommended) or poll"
+    }
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {}
+    "properties": {
+      "apiKey": {
+        "type": "string"
+      },
+      "deliveryMode": {
+        "type": "string",
+        "enum": [
+          "push",
+          "poll"
+        ],
+        "default": "push"
+      }
+    },
+    "required": [
+      "apiKey"
+    ]
   }
 }
