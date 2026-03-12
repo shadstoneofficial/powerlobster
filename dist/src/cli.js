@@ -149,9 +149,17 @@ const registerSetupCli = (ctx) => {
             ...(webhookUrl ? { webhookUrl } : {})
         };
         try {
+            // Access config service - handle potential different API structures
+            // Depending on OpenClaw version, config might be at:
+            // ctx.runtime.config (standard)
+            // ctx.config (older/cli context)
+            // ctx.services.config (newer)
+            const configService = ctx.runtime?.config || ctx.config || ctx.services?.config;
+            if (!configService) {
+                throw new Error('Config service not found in CLI context');
+            }
             // Load fresh config
-            // @ts-ignore
-            const config = await ctx.runtime.config.loadConfig();
+            const config = await configService.loadConfig();
             // Mutate config
             config.channels = config.channels || {};
             config.channels.powerlobster = {
@@ -161,8 +169,7 @@ const registerSetupCli = (ctx) => {
                     }]
             };
             // Write config
-            // @ts-ignore
-            await ctx.runtime.config.writeConfigFile(config);
+            await configService.writeConfigFile(config);
             p.note('Skills loaded: 5', 'Info');
             p.outro('✅ Configuration saved! Try sending a DM to test.');
         }
