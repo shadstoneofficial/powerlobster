@@ -20,6 +20,10 @@ import { getTools, activeClients } from './tools'; // Import activeClients
 
 import { PowerLobsterWebhookHandler } from './webhook'; // Import webhook handler
 
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
+
 const CHANNEL_ID: ChannelId = 'powerlobster';
 
 class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
@@ -146,20 +150,77 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
       this.clients.set(accountId, client);
       activeClients.set(accountId, client); // Register client for tools
 
-      if (config.deliveryMode === 'push') {
+      // --- CONFIG SYNC LOGIC ---
+      let effectiveConfig = { ...config }; // Start with local config
+      let syncSource = 'local';
+
+      if (config.relayId && config.relayApiKey) {
+          try {
+              console.log(`[PowerLobster] Syncing config from Relay for ${config.relayId}...`);
+              const relayConfig = await client.getRelayConfig();
+              
+              if (relayConfig) {
+                  console.log(`[PowerLobster] Config synced from relay (v${relayConfig.config_version})`);
+                  syncSource = 'relay';
+                  
+                  // Cache logic
+                  try {
+                      const cacheDir = path.join(os.homedir(), '.openclaw', 'cache');
+                      await fs.mkdir(cacheDir, { recursive: true });
+                      const cachePath = path.join(cacheDir, 'relay-config.json');
+                      await fs.writeFile(cachePath, JSON.stringify(relayConfig, null, 2));
+                  } catch (cacheErr) {
+                      console.warn('[PowerLobster] Failed to write config cache:', cacheErr);
+                  }
+
+                  // Apply relay overrides
+                  if (relayConfig.delivery_mode) {
+                      effectiveConfig.deliveryMode = relayConfig.delivery_mode;
+                  }
+                  if (relayConfig.webhook_url) {
+                      effectiveConfig.webhookUrl = relayConfig.webhook_url;
+                  }
+              }
+          } catch (err) {
+              console.warn(`[PowerLobster] Failed to sync relay config (using local/cache):`, err);
+              // Fallback to cache
+              try {
+                  const cachePath = path.join(os.homedir(), '.openclaw', 'cache', 'relay-config.json');
+                  const cachedData = await fs.readFile(cachePath, 'utf-8');
+                  const cachedConfig = JSON.parse(cachedData);
+                  
+                  if (cachedConfig.relay_id === config.relayId) { // Verify it matches this agent
+                      console.log(`[PowerLobster] Loaded config from cache (v${cachedConfig.config_version})`);
+                      syncSource = 'cache';
+                      if (cachedConfig.delivery_mode) effectiveConfig.deliveryMode = cachedConfig.delivery_mode;
+                      if (cachedConfig.webhook_url) effectiveConfig.webhookUrl = cachedConfig.webhook_url;
+                  }
+              } catch (readErr) {
+                  console.log('[PowerLobster] No cached config found, using local settings.');
+              }
+          }
+      } else {
+          console.log('[PowerLobster] No relay_id configured, skipping config sync');
+      }
+
+      // --- END CONFIG SYNC ---
+
+      // Use effectiveConfig for decision making
+      if (effectiveConfig.deliveryMode === 'push') {
           this.accountModes.set(accountId, 'push');
-          if (!config.webhookUrl) {
-              throw new Error('webhookUrl is required for push mode');
+          if (!effectiveConfig.webhookUrl) {
+              throw new Error('webhookUrl is required for push mode (check local config or relay settings)');
           }
 
-          console.log(`[PowerLobster] Registering for PUSH mode at ${config.webhookUrl}`);
+          console.log(`[PowerLobster] Registering for PUSH mode at ${effectiveConfig.webhookUrl}`);
           
           try {
               // Call Relay API to register
+              // Note: We use the *configured* webhookUrl (from relay or local)
               await client.configureRelay({
                   mode: 'push',
-                  url: config.webhookUrl,
-                  secret: config.webhookSecret
+                  url: effectiveConfig.webhookUrl,
+                  secret: effectiveConfig.webhookSecret
               });
               
               // Set up the webhook handler logic (passive listening)
@@ -184,7 +245,7 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
                   // We need to normalize the event structure here.
                   // If Relay pushes { type: ..., payload: ... }, we pass that.
                   await this.handleEvent(ctx, event);
-              }, config.webhookSecret);
+              }, effectiveConfig.webhookSecret);
               
               this.webhookHandlers.set(accountId, webhookHandler);
               console.log('[PowerLobster] Push mode active. Listening for events.');
@@ -199,7 +260,7 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
       } else {
           this.accountModes.set(accountId, 'poll');
           // Default: Start Poller (Existing logic)
-          const poller = new PowerLobsterPoller(config);
+          const poller = new PowerLobsterPoller(effectiveConfig); // Use effectiveConfig
           this.pollers.set(accountId, poller);
 
           poller.on('message', async (wrapper: { payload: PowerLobsterEvent; id: string }) => {

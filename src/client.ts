@@ -82,6 +82,43 @@ export class PowerLobsterClient {
     });
   }
 
+  async getRelayConfig() {
+    if (!this.config.relayId || !this.config.relayApiKey) {
+        // Can't sync without credentials
+        return null;
+    }
+
+    // Call GET /api/v1/agent/:relay_id/config
+    // 5s timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    try {
+        const response = await fetch(
+            `${RELAY_BASE_URL}/agent/${this.config.relayId}/config`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.config.relayApiKey}`
+                },
+                signal: controller.signal
+            }
+        );
+        
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch relay config: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (err) {
+        clearTimeout(timeoutId);
+        throw err;
+    }
+  }
+
   async sendDM(userId: string, content: string) {
     // userId in PowerLobster is typically a handle for DMs
     return this.request(`${BASE_URL}/message`, 'POST', {

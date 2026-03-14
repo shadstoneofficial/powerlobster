@@ -1,10 +1,46 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.powerLobsterChannel = void 0;
 const client_1 = require("./client");
 const poller_1 = require("./poller");
 const tools_1 = require("./tools"); // Import activeClients
 const webhook_1 = require("./webhook"); // Import webhook handler
+const fs = __importStar(require("fs/promises"));
+const path = __importStar(require("path"));
+const os = __importStar(require("os"));
 const CHANNEL_ID = 'powerlobster';
 class PowerLobsterChannel {
     constructor() {
@@ -114,18 +150,74 @@ class PowerLobsterChannel {
                 const client = new client_1.PowerLobsterClient(config);
                 this.clients.set(accountId, client);
                 tools_1.activeClients.set(accountId, client); // Register client for tools
-                if (config.deliveryMode === 'push') {
-                    this.accountModes.set(accountId, 'push');
-                    if (!config.webhookUrl) {
-                        throw new Error('webhookUrl is required for push mode');
+                // --- CONFIG SYNC LOGIC ---
+                let effectiveConfig = { ...config }; // Start with local config
+                let syncSource = 'local';
+                if (config.relayId && config.relayApiKey) {
+                    try {
+                        console.log(`[PowerLobster] Syncing config from Relay for ${config.relayId}...`);
+                        const relayConfig = await client.getRelayConfig();
+                        if (relayConfig) {
+                            console.log(`[PowerLobster] Config synced from relay (v${relayConfig.config_version})`);
+                            syncSource = 'relay';
+                            // Cache logic
+                            try {
+                                const cacheDir = path.join(os.homedir(), '.openclaw', 'cache');
+                                await fs.mkdir(cacheDir, { recursive: true });
+                                const cachePath = path.join(cacheDir, 'relay-config.json');
+                                await fs.writeFile(cachePath, JSON.stringify(relayConfig, null, 2));
+                            }
+                            catch (cacheErr) {
+                                console.warn('[PowerLobster] Failed to write config cache:', cacheErr);
+                            }
+                            // Apply relay overrides
+                            if (relayConfig.delivery_mode) {
+                                effectiveConfig.deliveryMode = relayConfig.delivery_mode;
+                            }
+                            if (relayConfig.webhook_url) {
+                                effectiveConfig.webhookUrl = relayConfig.webhook_url;
+                            }
+                        }
                     }
-                    console.log(`[PowerLobster] Registering for PUSH mode at ${config.webhookUrl}`);
+                    catch (err) {
+                        console.warn(`[PowerLobster] Failed to sync relay config (using local/cache):`, err);
+                        // Fallback to cache
+                        try {
+                            const cachePath = path.join(os.homedir(), '.openclaw', 'cache', 'relay-config.json');
+                            const cachedData = await fs.readFile(cachePath, 'utf-8');
+                            const cachedConfig = JSON.parse(cachedData);
+                            if (cachedConfig.relay_id === config.relayId) { // Verify it matches this agent
+                                console.log(`[PowerLobster] Loaded config from cache (v${cachedConfig.config_version})`);
+                                syncSource = 'cache';
+                                if (cachedConfig.delivery_mode)
+                                    effectiveConfig.deliveryMode = cachedConfig.delivery_mode;
+                                if (cachedConfig.webhook_url)
+                                    effectiveConfig.webhookUrl = cachedConfig.webhook_url;
+                            }
+                        }
+                        catch (readErr) {
+                            console.log('[PowerLobster] No cached config found, using local settings.');
+                        }
+                    }
+                }
+                else {
+                    console.log('[PowerLobster] No relay_id configured, skipping config sync');
+                }
+                // --- END CONFIG SYNC ---
+                // Use effectiveConfig for decision making
+                if (effectiveConfig.deliveryMode === 'push') {
+                    this.accountModes.set(accountId, 'push');
+                    if (!effectiveConfig.webhookUrl) {
+                        throw new Error('webhookUrl is required for push mode (check local config or relay settings)');
+                    }
+                    console.log(`[PowerLobster] Registering for PUSH mode at ${effectiveConfig.webhookUrl}`);
                     try {
                         // Call Relay API to register
+                        // Note: We use the *configured* webhookUrl (from relay or local)
                         await client.configureRelay({
                             mode: 'push',
-                            url: config.webhookUrl,
-                            secret: config.webhookSecret
+                            url: effectiveConfig.webhookUrl,
+                            secret: effectiveConfig.webhookSecret
                         });
                         // Set up the webhook handler logic (passive listening)
                         const webhookHandler = new webhook_1.PowerLobsterWebhookHandler(async (event) => {
@@ -145,7 +237,7 @@ class PowerLobsterChannel {
                             // We need to normalize the event structure here.
                             // If Relay pushes { type: ..., payload: ... }, we pass that.
                             await this.handleEvent(ctx, event);
-                        }, config.webhookSecret);
+                        }, effectiveConfig.webhookSecret);
                         this.webhookHandlers.set(accountId, webhookHandler);
                         console.log('[PowerLobster] Push mode active. Listening for events.');
                     }
@@ -159,7 +251,7 @@ class PowerLobsterChannel {
                 else {
                     this.accountModes.set(accountId, 'poll');
                     // Default: Start Poller (Existing logic)
-                    const poller = new poller_1.PowerLobsterPoller(config);
+                    const poller = new poller_1.PowerLobsterPoller(effectiveConfig); // Use effectiveConfig
                     this.pollers.set(accountId, poller);
                     poller.on('message', async (wrapper) => {
                         const event = wrapper.payload;
@@ -334,61 +426,59 @@ class PowerLobsterChannel {
         // Normalize event structure (Relay vs expected)
         const eventType = event.type || event.event;
         const eventPayload = event.payload || event.data;
+        const eventId = event.id || event.event_id;
         console.log(`[PowerLobster] Processing normalized event: ${eventType}`, eventPayload);
         // Update last event time for status reporting
         this.lastEventTime.set(accountId, new Date());
-        let peerId = '';
-        let content = '';
-        let type = 'unknown';
-        if (eventType === 'dm.received') {
-            peerId = eventPayload.sender_handle || eventPayload.from; // Check both sender_handle and from
-            content = eventPayload.content;
-            type = 'dm';
-        }
-        else if (eventType === 'wave.started') {
-            content = `🌊 Wave started!\nTask: ${eventPayload.task_title || eventPayload.title}\nWave ID: ${eventPayload.wave_id}\nTime: ${eventPayload.wave_time}`;
-            peerId = 'wave-system';
-            type = 'wave';
-        }
-        else if (eventType === 'task.assigned') {
-            content = `Task assigned: ${eventPayload.task?.title}. Project: ${eventPayload.project?.title}. Description: ${eventPayload.task?.description || "No description"}`;
-            peerId = 'task-system';
-            type = 'task';
-        }
-        else if (eventType === 'task.comment') {
-            content = `New comment on task ${eventPayload.task?.title} from ${eventPayload.author}: ${eventPayload.content}`;
-            peerId = 'task-system';
-            type = 'task';
-        }
-        else if (eventType === 'mention') {
-            content = `You were mentioned by ${eventPayload.author} in post: ${eventPayload.content}`;
-            peerId = eventPayload.author || 'mention-system';
-            type = 'mention';
-        }
-        else if (eventType === 'wave.reminder') {
-            content = `Wave reminder: ${eventPayload.task_title || eventPayload.title} starts in 60 minutes`;
-            peerId = 'wave-system';
-            type = 'wave';
-        }
-        else if (eventType === 'wave.scheduled') {
-            content = `Wave scheduled: ${eventPayload.task_title || eventPayload.title} at ${eventPayload.wave_time || eventPayload.time}`;
-            peerId = 'wave-system';
-            type = 'wave';
-        }
-        else {
-            console.log(`[PowerLobster] Unhandled event type: ${eventType}`);
-            return;
-        }
-        // Resolve route
-        let agentId = 'main'; // Default fallback
         try {
-            // Direct routing to configured agent ID (primary method for PowerLobster)
+            let peerId = '';
+            let content = '';
+            let type = 'unknown';
+            if (eventType === 'dm.received') {
+                peerId = eventPayload.sender_handle || eventPayload.from; // Check both sender_handle and from
+                content = eventPayload.content;
+                type = 'dm';
+            }
+            else if (eventType === 'wave.started') {
+                content = `🌊 Wave started!\nTask: ${eventPayload.task_title || eventPayload.title}\nWave ID: ${eventPayload.wave_id}\nTime: ${eventPayload.wave_time}`;
+                peerId = 'wave-system';
+                type = 'wave';
+            }
+            else if (eventType === 'task.assigned') {
+                content = `Task assigned: ${eventPayload.task?.title}. Project: ${eventPayload.project?.title}. Description: ${eventPayload.task?.description || "No description"}`;
+                peerId = 'task-system';
+                type = 'task';
+            }
+            else if (eventType === 'task.comment') {
+                content = `New comment on task ${eventPayload.task?.title} from ${eventPayload.author}: ${eventPayload.content}`;
+                peerId = 'task-system';
+                type = 'task';
+            }
+            else if (eventType === 'mention') {
+                content = `You were mentioned by ${eventPayload.author} in post: ${eventPayload.content}`;
+                peerId = eventPayload.author || 'mention-system';
+                type = 'mention';
+            }
+            else if (eventType === 'wave.reminder') {
+                content = `Wave reminder: ${eventPayload.task_title || eventPayload.title} starts in 60 minutes`;
+                peerId = 'wave-system';
+                type = 'wave';
+            }
+            else if (eventType === 'wave.scheduled') {
+                content = `Wave scheduled: ${eventPayload.task_title || eventPayload.title} at ${eventPayload.wave_time || eventPayload.time}`;
+                peerId = 'wave-system';
+                type = 'wave';
+            }
+            else {
+                console.log(`[PowerLobster] Unhandled event type: ${eventType}`);
+                return;
+            }
+            // Resolve route
+            let agentId = 'main'; // Default fallback
             if (account.config.agentId) {
                 agentId = account.config.agentId;
             }
             else {
-                // Fallback to dynamic routing if no specific agent configured
-                // This is rare for PowerLobster but kept for advanced use cases
                 try {
                     const route = await channelRuntime.routing.resolveAgentRoute({
                         channel: this.id,
@@ -419,10 +509,8 @@ class PowerLobsterChannel {
                     Platform: "powerlobster",
                 };
                 // Pass full routing context if available, otherwise minimal fallback
-                // This attempts to address the "undefined session" error by providing at least a mocked session structure if routing failed
                 if (!event.session) {
                     // Mock session if missing from event/routing
-                    // This is a defensive measure for the routing warning
                 }
                 // DEBUG: Check channelRuntime structure
                 console.log('[PowerLobster] channelRuntime keys:', Object.keys(channelRuntime));
@@ -457,9 +545,40 @@ class PowerLobsterChannel {
             else {
                 console.warn(`[PowerLobster] No agent resolved for event from ${peerId}`);
             }
+            // Report Success to Relay
+            if (eventId) {
+                const client = this.clients.get(accountId);
+                if (client) {
+                    await client.reportEventResult(eventId, { status: 'success' });
+                }
+            }
         }
         catch (err) {
-            console.error(`[PowerLobster] Error dispatching event:`, err);
+            console.error(`[PowerLobster] Failed to handle event ${eventId}:`, err);
+            // Report Failure to Relay
+            if (eventId) {
+                const client = this.clients.get(accountId);
+                if (client) {
+                    // Detect Error Reason
+                    let reason = 'error';
+                    const msg = err.message?.toLowerCase() || '';
+                    if (msg.includes('rate limit') || msg.includes('429') || msg.includes('quota')) {
+                        reason = 'rate_limit';
+                    }
+                    else if (msg.includes('timeout') || msg.includes('etimedout')) {
+                        reason = 'timeout';
+                    }
+                    else if (msg.includes('network') || msg.includes('connection')) {
+                        reason = 'offline';
+                    }
+                    await client.reportEventResult(eventId, {
+                        status: 'failed',
+                        error_reason: reason
+                    });
+                }
+            }
+            // Rethrow for logs/internal handlers
+            throw err;
         }
     }
     // Method to handle incoming webhooks (called from index.ts or router)
