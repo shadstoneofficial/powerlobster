@@ -32,6 +32,7 @@ class PowerLobsterWebhookHandler {
             throw new Error('Invalid event payload');
         }
         // Process event
+        // Note: If this throws (e.g., due to rate limits), the try/catch in index.ts will handle it
         await this.eventHandler(event);
     }
 }

@@ -53,15 +53,41 @@ const plugin = {
                         return true;
                     }
                     try {
+                        // Attempt to handle the webhook event
                         await channel_1.powerLobsterChannel.handleWebhook(req);
+                        // If we reach here, the event was parsed and passed to the OpenClaw event handler.
+                        // Note: OpenClaw's event queueing/processing is internal, so returning 200 here
+                        // means the plugin successfully ingested it into the system.
                         res.statusCode = 200;
-                        res.end(JSON.stringify({ status: 'received' }));
+                        res.setHeader('Content-Type', 'application/json');
+                        res.end(JSON.stringify({
+                            received: true,
+                            will_execute: true
+                        }));
                         return true;
                     }
                     catch (err) {
                         console.error('[PowerLobster] Webhook error:', err);
-                        res.statusCode = 500;
-                        res.end(JSON.stringify({ error: err.message }));
+                        // Determine if it's a structural error vs capacity error
+                        // For now, if the webhook throws, we assume it's blocked/failed
+                        const errorMsg = err.message || 'unknown_error';
+                        let errorType = 'config_error'; // Default assumption if it fails early
+                        if (errorMsg.includes('Invalid event payload') || errorMsg.includes('Invalid JSON body')) {
+                            errorType = 'invalid_payload';
+                        }
+                        else if (errorMsg.includes('No webhook handler found')) {
+                            errorType = 'not_configured';
+                        }
+                        // Return 200 to acknowledge receipt, but indicate failure to execute
+                        // so the relay doesn't infinitely retry a bad payload, but logs the status.
+                        res.statusCode = 200;
+                        res.setHeader('Content-Type', 'application/json');
+                        res.end(JSON.stringify({
+                            received: true,
+                            will_execute: false,
+                            error: errorType,
+                            details: errorMsg
+                        }));
                         return true;
                     }
                 }
