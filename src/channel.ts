@@ -47,6 +47,7 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
   private clients = new Map<string, PowerLobsterClient>();
   private pollers = new Map<string, PowerLobsterPoller>();
   private webhookHandlers = new Map<string, PowerLobsterWebhookHandler>();
+  private activeContexts = new Map<string, ChannelGatewayContext<PowerLobsterAccount>>(); // Added to store contexts
   private runningPromises = new Map<string, () => void>();
   private lastEventTime = new Map<string, Date>(); // Track last event per account
   private accountModes = new Map<string, 'poll' | 'push'>(); // Track mode per account
@@ -149,6 +150,7 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
       const client = new PowerLobsterClient(config);
       this.clients.set(accountId, client);
       activeClients.set(accountId, client); // Register client for tools
+      this.activeContexts.set(accountId, ctx); // Store context for webhook fallback
 
       // --- CONFIG SYNC LOGIC ---
       let effectiveConfig = { ...config }; // Start with local config
@@ -297,6 +299,7 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
         this.pollers.delete(accountId);
       }
       this.webhookHandlers.delete(accountId); // Cleanup webhook handler
+      this.activeContexts.delete(accountId); // Cleanup context
       this.clients.delete(accountId);
       activeClients.delete(accountId); // Clean up client from tools registry
 
@@ -502,12 +505,8 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
   // Method to handle incoming webhooks (called from index.ts or router)
   async handleWebhook(req: any) {
       // Logic to determine which account this webhook is for.
-      // If we support multiple accounts, the webhook URL might need an ID or query param?
-      // OR the payload contains the relay_id/agent_id.
       
-      // For now, let's assume single-tenant or broadcast to all matching?
-      // Better: iterate handlers and try to match?
-      // Or rely on config.
+      console.log(`[PowerLobster] Webhook received. Active handlers: ${this.webhookHandlers.size}`);
       
       // If we have only one account in push mode, use that.
       if (this.webhookHandlers.size === 1) {
@@ -526,6 +525,29 @@ class PowerLobsterChannel implements ChannelPlugin<PowerLobsterAccount> {
           if (handler) {
               return handler.handle(req);
           }
+      }
+      
+      // Fallback: If no webhook handlers are explicitly registered (e.g., config sync failed or push mode wasn't strictly enforced in local config but the relay pushed anyway), we should still try to handle it if we have at least one client/account running.
+      if (this.webhookHandlers.size === 0 && this.clients.size > 0) {
+          console.warn('[PowerLobster] Webhook received but no explicit webhook handlers registered. Attempting to route to first active account.');
+          
+          // Find the first account ID
+          const accountId = this.clients.keys().next().value;
+          
+          if (accountId) {
+               const ctx = this.activeContexts.get(accountId);
+               if (!ctx) {
+                   console.error('[PowerLobster] Cannot process fallback webhook without gateway context.');
+                   throw new Error('No webhook handler found and unable to fallback (missing context)');
+               }
+               
+               // Create an ad-hoc handler just for this request
+               const handler = new PowerLobsterWebhookHandler(async (event) => {
+                   await this.handleEvent(ctx, event);
+               });
+               
+               return handler.handle(req);
+           }
       }
       
       throw new Error('No webhook handler found');

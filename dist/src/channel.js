@@ -63,6 +63,7 @@ class PowerLobsterChannel {
         this.clients = new Map();
         this.pollers = new Map();
         this.webhookHandlers = new Map();
+        this.activeContexts = new Map(); // Added to store contexts
         this.runningPromises = new Map();
         this.lastEventTime = new Map(); // Track last event per account
         this.accountModes = new Map(); // Track mode per account
@@ -150,6 +151,7 @@ class PowerLobsterChannel {
                 const client = new client_1.PowerLobsterClient(config);
                 this.clients.set(accountId, client);
                 tools_1.activeClients.set(accountId, client); // Register client for tools
+                this.activeContexts.set(accountId, ctx); // Store context for webhook fallback
                 // --- CONFIG SYNC LOGIC ---
                 let effectiveConfig = { ...config }; // Start with local config
                 let syncSource = 'local';
@@ -282,6 +284,7 @@ class PowerLobsterChannel {
                     this.pollers.delete(accountId);
                 }
                 this.webhookHandlers.delete(accountId); // Cleanup webhook handler
+                this.activeContexts.delete(accountId); // Cleanup context
                 this.clients.delete(accountId);
                 tools_1.activeClients.delete(accountId); // Clean up client from tools registry
                 // Resolve the startAccount promise to let it exit cleanly
@@ -439,114 +442,36 @@ class PowerLobsterChannel {
                 peerId = eventPayload.sender_handle || eventPayload.from; // Check both sender_handle and from
                 content = eventPayload.content;
                 type = 'dm';
-                await ctx.sendEvent({
-                    type: 'message',
-                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
-                    payload: {
-                        text: eventPayload.content,
-                        files: eventPayload.attachments || [],
-                        metadata: {
-                            delivery_method: eventMeta.delivery_method || 'unknown',
-                            ...eventMeta
-                        }
-                    },
-                });
             }
             else if (eventType === 'wave.started') {
                 content = `🌊 Wave started!\nTask: ${eventPayload.task_title || eventPayload.title}\nWave ID: ${eventPayload.wave_id}\nTime: ${eventPayload.wave_time}`;
                 peerId = 'wave-system';
                 type = 'wave';
-                await ctx.sendEvent({
-                    type: 'message',
-                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
-                    payload: {
-                        text: content,
-                        metadata: {
-                            delivery_method: eventMeta.delivery_method || 'unknown',
-                            ...eventMeta
-                        }
-                    },
-                });
             }
             else if (eventType === 'task.assigned') {
                 content = `Task assigned: ${eventPayload.task?.title}. Project: ${eventPayload.project?.title}. Description: ${eventPayload.task?.description || "No description"}`;
                 peerId = 'task-system';
                 type = 'task';
-                await ctx.sendEvent({
-                    type: 'message',
-                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
-                    payload: {
-                        text: content,
-                        metadata: {
-                            delivery_method: eventMeta.delivery_method || 'unknown',
-                            ...eventMeta
-                        }
-                    },
-                });
             }
             else if (eventType === 'task.comment') {
                 content = `New comment on task ${eventPayload.task?.title} from ${eventPayload.author}: ${eventPayload.content}`;
                 peerId = 'task-system';
                 type = 'task';
-                await ctx.sendEvent({
-                    type: 'message',
-                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
-                    payload: {
-                        text: content,
-                        metadata: {
-                            delivery_method: eventMeta.delivery_method || 'unknown',
-                            ...eventMeta
-                        }
-                    },
-                });
             }
             else if (eventType === 'mention') {
                 content = `You were mentioned by ${eventPayload.author} in post: ${eventPayload.content}`;
                 peerId = eventPayload.author || 'mention-system';
                 type = 'mention';
-                await ctx.sendEvent({
-                    type: 'message',
-                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
-                    payload: {
-                        text: content,
-                        metadata: {
-                            delivery_method: eventMeta.delivery_method || 'unknown',
-                            ...eventMeta
-                        }
-                    },
-                });
             }
             else if (eventType === 'wave.reminder') {
                 content = `Wave reminder: ${eventPayload.task_title || eventPayload.title} starts in 60 minutes`;
                 peerId = 'wave-system';
                 type = 'wave';
-                await ctx.sendEvent({
-                    type: 'message',
-                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
-                    payload: {
-                        text: content,
-                        metadata: {
-                            delivery_method: eventMeta.delivery_method || 'unknown',
-                            ...eventMeta
-                        }
-                    },
-                });
             }
             else if (eventType === 'wave.scheduled') {
                 content = `Wave scheduled: ${eventPayload.task_title || eventPayload.title} at ${eventPayload.wave_time || eventPayload.time}`;
                 peerId = 'wave-system';
                 type = 'wave';
-                await ctx.sendEvent({
-                    type: 'message',
-                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
-                    payload: {
-                        text: content,
-                        metadata: {
-                            delivery_method: eventMeta.delivery_method || 'unknown',
-                            ...eventMeta
-                        }
-                    },
-                });
             }
             else {
                 console.log(`[PowerLobster] Unhandled event type: ${eventType}`);
@@ -586,6 +511,10 @@ class PowerLobsterChannel {
                     From: peerId,
                     Channel: this.id,
                     Platform: "powerlobster",
+                    Metadata: {
+                        delivery_method: eventMeta.delivery_method || 'unknown',
+                        ...eventMeta
+                    }
                 };
                 // Pass full routing context if available, otherwise minimal fallback
                 if (!event.session) {
@@ -663,11 +592,7 @@ class PowerLobsterChannel {
     // Method to handle incoming webhooks (called from index.ts or router)
     async handleWebhook(req) {
         // Logic to determine which account this webhook is for.
-        // If we support multiple accounts, the webhook URL might need an ID or query param?
-        // OR the payload contains the relay_id/agent_id.
-        // For now, let's assume single-tenant or broadcast to all matching?
-        // Better: iterate handlers and try to match?
-        // Or rely on config.
+        console.log(`[PowerLobster] Webhook received. Active handlers: ${this.webhookHandlers.size}`);
         // If we have only one account in push mode, use that.
         if (this.webhookHandlers.size === 1) {
             const handler = this.webhookHandlers.values().next().value;
@@ -681,6 +606,24 @@ class PowerLobsterChannel {
             console.warn('[PowerLobster] Multiple accounts in push mode not fully supported for shared webhook URL. Using first handler.');
             const handler = this.webhookHandlers.values().next().value;
             if (handler) {
+                return handler.handle(req);
+            }
+        }
+        // Fallback: If no webhook handlers are explicitly registered (e.g., config sync failed or push mode wasn't strictly enforced in local config but the relay pushed anyway), we should still try to handle it if we have at least one client/account running.
+        if (this.webhookHandlers.size === 0 && this.clients.size > 0) {
+            console.warn('[PowerLobster] Webhook received but no explicit webhook handlers registered. Attempting to route to first active account.');
+            // Find the first account ID
+            const accountId = this.clients.keys().next().value;
+            if (accountId) {
+                const ctx = this.activeContexts.get(accountId);
+                if (!ctx) {
+                    console.error('[PowerLobster] Cannot process fallback webhook without gateway context.');
+                    throw new Error('No webhook handler found and unable to fallback (missing context)');
+                }
+                // Create an ad-hoc handler just for this request
+                const handler = new webhook_1.PowerLobsterWebhookHandler(async (event) => {
+                    await this.handleEvent(ctx, event);
+                });
                 return handler.handle(req);
             }
         }

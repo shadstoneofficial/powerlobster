@@ -260,3 +260,38 @@ const event = {
     _meta: body._meta || {}
 };
 ```
+
+---
+
+## 5. Feature: Fix Webhook Handler Fallback
+
+**Objective:** Handle cases where webhook handlers aren't fully registered but events are pushed.
+
+### File: [src/channel.ts](src/channel.ts)
+
+**Location:** `handleWebhook` method.
+
+```typescript
+// Fallback: If no webhook handlers are explicitly registered (e.g., config sync failed or push mode wasn't strictly enforced in local config but the relay pushed anyway), we should still try to handle it if we have at least one client/account running.
+if (this.webhookHandlers.size === 0 && this.clients.size > 0) {
+    console.warn('[PowerLobster] Webhook received but no explicit webhook handlers registered. Attempting to route to first active account.');
+    
+    // Find the first account ID
+    const accountId = this.clients.keys().next().value;
+    
+    if (accountId) {
+        const ctx = this.activeContexts.get(accountId);
+        if (!ctx) {
+            console.error('[PowerLobster] Cannot process fallback webhook without gateway context.');
+            throw new Error('No webhook handler found and unable to fallback (missing context)');
+        }
+        
+        // Create an ad-hoc handler just for this request
+        const handler = new PowerLobsterWebhookHandler(async (event) => {
+            await this.handleEvent(ctx, event);
+        });
+        
+        return handler.handle(req);
+    }
+}
+```
