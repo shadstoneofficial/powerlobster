@@ -195,9 +195,9 @@ async reportEventResult(eventId: string, result: { status: 'success' | 'failed';
 
 ---
 
-## 3. Feature: Metadata Preservation (Corrected)
+## 3. Feature: Metadata Preservation (Corrected to UntrustedContext)
 
-**Objective:** Pass the `_meta` field from incoming Relay events into the OpenClaw event payload via `MsgContext`.
+**Objective:** Pass the `_meta` field from incoming Relay events into the OpenClaw event payload via `MsgContext` using the official `UntrustedContext` array to prevent OpenClaw from stripping it.
 
 ### File: [src/types.ts](src/types.ts)
 
@@ -211,7 +211,7 @@ export interface MsgContext {
   From: string;
   Channel: string;
   Platform: string;
-  Metadata?: any; // Added Metadata support
+  UntrustedContext?: string[]; // Official OpenClaw metadata passing
 }
 ```
 
@@ -234,10 +234,9 @@ export interface MsgContext {
         From: peerId,
         Channel: this.id,
         Platform: "powerlobster",
-        Metadata: {
-            delivery_method: eventMeta.delivery_method || 'unknown',
-            ...eventMeta
-        }
+        UntrustedContext: [
+            `PowerLobster Delivery Method: ${eventMeta.delivery_method || 'unknown'}`
+        ]
     };
     ```
 

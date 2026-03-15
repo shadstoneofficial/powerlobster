@@ -511,10 +511,9 @@ class PowerLobsterChannel {
                     From: peerId,
                     Channel: this.id,
                     Platform: "powerlobster",
-                    Metadata: {
-                        delivery_method: eventMeta.delivery_method || 'unknown',
-                        ...eventMeta
-                    }
+                    UntrustedContext: [
+                        `PowerLobster Delivery Method: ${eventMeta.delivery_method || 'unknown'}`
+                    ]
                 };
                 // Pass full routing context if available, otherwise minimal fallback
                 if (!event.session) {

@@ -29,7 +29,7 @@ export interface MsgContext {
   From: string;
   Channel: string;
   Platform: string;
-  Metadata?: any; // Added Metadata support
+  UntrustedContext?: string[]; // Official OpenClaw metadata passing
 }
 
 export interface ChannelGatewayContext<ResolvedAccount = any> {
