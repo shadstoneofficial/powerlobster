@@ -49,6 +49,12 @@ export interface ChannelGatewayContext<ResolvedAccount = any> {
       }) => Promise<void>;
     };
   };
+  // Add sendEvent definition which was missing
+  sendEvent: (event: {
+      type: string;
+      source: { channel: string; account: string; peer: string };
+      payload: { text: string; files?: any[]; metadata?: any };
+  }) => Promise<void>;
 }
 
 export interface ResolveAgentRouteInput {

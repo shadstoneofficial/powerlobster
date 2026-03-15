@@ -427,6 +427,7 @@ class PowerLobsterChannel {
         const eventType = event.type || event.event;
         const eventPayload = event.payload || event.data;
         const eventId = event.id || event.event_id;
+        const eventMeta = event._meta || {}; // Extract metadata
         console.log(`[PowerLobster] Processing normalized event: ${eventType}`, eventPayload);
         // Update last event time for status reporting
         this.lastEventTime.set(accountId, new Date());
@@ -438,36 +439,114 @@ class PowerLobsterChannel {
                 peerId = eventPayload.sender_handle || eventPayload.from; // Check both sender_handle and from
                 content = eventPayload.content;
                 type = 'dm';
+                await ctx.sendEvent({
+                    type: 'message',
+                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
+                    payload: {
+                        text: eventPayload.content,
+                        files: eventPayload.attachments || [],
+                        metadata: {
+                            delivery_method: eventMeta.delivery_method || 'unknown',
+                            ...eventMeta
+                        }
+                    },
+                });
             }
             else if (eventType === 'wave.started') {
                 content = `🌊 Wave started!\nTask: ${eventPayload.task_title || eventPayload.title}\nWave ID: ${eventPayload.wave_id}\nTime: ${eventPayload.wave_time}`;
                 peerId = 'wave-system';
                 type = 'wave';
+                await ctx.sendEvent({
+                    type: 'message',
+                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
+                    payload: {
+                        text: content,
+                        metadata: {
+                            delivery_method: eventMeta.delivery_method || 'unknown',
+                            ...eventMeta
+                        }
+                    },
+                });
             }
             else if (eventType === 'task.assigned') {
                 content = `Task assigned: ${eventPayload.task?.title}. Project: ${eventPayload.project?.title}. Description: ${eventPayload.task?.description || "No description"}`;
                 peerId = 'task-system';
                 type = 'task';
+                await ctx.sendEvent({
+                    type: 'message',
+                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
+                    payload: {
+                        text: content,
+                        metadata: {
+                            delivery_method: eventMeta.delivery_method || 'unknown',
+                            ...eventMeta
+                        }
+                    },
+                });
             }
             else if (eventType === 'task.comment') {
                 content = `New comment on task ${eventPayload.task?.title} from ${eventPayload.author}: ${eventPayload.content}`;
                 peerId = 'task-system';
                 type = 'task';
+                await ctx.sendEvent({
+                    type: 'message',
+                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
+                    payload: {
+                        text: content,
+                        metadata: {
+                            delivery_method: eventMeta.delivery_method || 'unknown',
+                            ...eventMeta
+                        }
+                    },
+                });
             }
             else if (eventType === 'mention') {
                 content = `You were mentioned by ${eventPayload.author} in post: ${eventPayload.content}`;
                 peerId = eventPayload.author || 'mention-system';
                 type = 'mention';
+                await ctx.sendEvent({
+                    type: 'message',
+                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
+                    payload: {
+                        text: content,
+                        metadata: {
+                            delivery_method: eventMeta.delivery_method || 'unknown',
+                            ...eventMeta
+                        }
+                    },
+                });
             }
             else if (eventType === 'wave.reminder') {
                 content = `Wave reminder: ${eventPayload.task_title || eventPayload.title} starts in 60 minutes`;
                 peerId = 'wave-system';
                 type = 'wave';
+                await ctx.sendEvent({
+                    type: 'message',
+                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
+                    payload: {
+                        text: content,
+                        metadata: {
+                            delivery_method: eventMeta.delivery_method || 'unknown',
+                            ...eventMeta
+                        }
+                    },
+                });
             }
             else if (eventType === 'wave.scheduled') {
                 content = `Wave scheduled: ${eventPayload.task_title || eventPayload.title} at ${eventPayload.wave_time || eventPayload.time}`;
                 peerId = 'wave-system';
                 type = 'wave';
+                await ctx.sendEvent({
+                    type: 'message',
+                    source: { channel: CHANNEL_ID, account: accountId, peer: peerId },
+                    payload: {
+                        text: content,
+                        metadata: {
+                            delivery_method: eventMeta.delivery_method || 'unknown',
+                            ...eventMeta
+                        }
+                    },
+                });
             }
             else {
                 console.log(`[PowerLobster] Unhandled event type: ${eventType}`);
