@@ -29,7 +29,7 @@ class PowerLobsterWebhookHandler {
         // We need to extract the inner payload and preserve metadata.
         const event = {
             ...(body.payload || body),
-            _meta: body._meta || {}
+            _meta: body._meta || (body.payload && body.payload._meta) || {}
         };
         if (!event || !event.type) {
             throw new Error('Invalid event payload');
