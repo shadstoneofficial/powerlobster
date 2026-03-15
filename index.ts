@@ -23,6 +23,10 @@ const plugin = {
           "poll"
         ],
         default: "push"
+      },
+      webhookSecret: {
+        type: "string",
+        description: "Secret for HMAC signature verification of incoming webhooks"
       }
     }
   },
@@ -36,6 +40,12 @@ const plugin = {
     deliveryMode: {
       label: "Delivery Mode",
       help: "push (recommended) or poll"
+    },
+    webhookSecret: {
+      label: "Webhook Secret",
+      sensitive: true,
+      placeholder: "whsec_...",
+      help: "Secret for verifying webhook signatures. Get from relay.powerlobster.com"
     }
   },
   register(api: any) {
@@ -71,10 +81,22 @@ const plugin = {
                 } catch (err: any) {
                     console.error('[PowerLobster] Webhook error:', err);
                     
-                    // Determine if it's a structural error vs capacity error
-                    // For now, if the webhook throws, we assume it's blocked/failed
                     const errorMsg = err.message || 'unknown_error';
-                    let errorType = 'config_error'; // Default assumption if it fails early
+                    
+                    // Handle 401 Unauthorized (signature validation failed)
+                    if (err.statusCode === 401) {
+                        res.statusCode = 401;
+                        res.setHeader('Content-Type', 'application/json');
+                        res.end(JSON.stringify({ 
+                            received: false, 
+                            error: 'unauthorized',
+                            details: errorMsg
+                        }));
+                        return true;
+                    }
+                    
+                    // Determine error type for other failures
+                    let errorType = 'config_error';
                     
                     if (errorMsg.includes('Invalid event payload') || errorMsg.includes('Invalid JSON body')) {
                         errorType = 'invalid_payload';
